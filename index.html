@@ -18,6 +18,7 @@
     --shadow:0 18px 40px rgba(0,0,0,.35);
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html, body, .app{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;overscroll-behavior:none;}
   body{
     margin:0;
     min-height:100vh;
@@ -111,9 +112,11 @@
   .bank,.slots{width:100%; display:flex; flex-wrap:wrap; gap:8px; justify-content:center; align-content:flex-start}
   .bank{min-height:112px; margin:10px 0 16px; padding:12px; border-radius:22px; background:rgba(0,0,0,.22); border:1px solid rgba(255,255,255,.16)}
   .tile,.slot{width:42px; height:48px; border-radius:12px; display:grid; place-items:center; font-size:24px; font-weight:1000; touch-action:none; user-select:none}
-  .tile{background:linear-gradient(180deg,#fff7d6,#ffd166); color:#3b2600; box-shadow:0 5px 0 #a96b0e; cursor:grab}
+  .tile{background:linear-gradient(180deg,#fff7d6,#ffd166); color:#3b2600; box-shadow:0 5px 0 #a96b0e; cursor:pointer; border:0; padding:0; max-width:none; touch-action:manipulation}
+  .tile.selected{outline:4px solid #48cae4; transform:translateY(-4px) scale(1.08)}
+  .tile.bad-select{animation:shake .28s linear}
   .tile.used{opacity:.25; pointer-events:none; transform:scale(.86)}
-  .slot{background:rgba(255,255,255,.16); border:2px dashed rgba(255,255,255,.45); color:white}
+  .slot{background:rgba(255,255,255,.16); border:2px dashed rgba(255,255,255,.45); color:white; padding:0; max-width:none; touch-action:manipulation}
   .slot.correct{background:linear-gradient(180deg,#b9ffd8,#29d391); border:0; color:#073822; box-shadow:0 5px 0 #0c7d50; animation:slotOk .22s ease}
   @keyframes slotOk{50%{transform:scale(1.15)}}
   .space{width:14px; height:48px}
@@ -145,7 +148,7 @@
 
   <section class="screen" id="mission">
     <div class="mission-top">
-      <div class="pill" id="progress">Mission 1 / 20</div>
+      <div class="pill" id="progress">Mission 1 / 15</div>
       <div class="letters-mini" id="lettersMini"></div>
     </div>
     <div class="mission-card">
@@ -161,7 +164,7 @@
 
   <section class="screen" id="finalPuzzle">
     <div class="final-title">Dernier défi 🧩</div>
-    <p class="final-instruction">Glissez les lettres dans les bonnes cases pour révéler le lieu du trésor.</p>
+    <p class="final-instruction">Touchez une lettre, puis touchez la bonne case pour révéler le lieu final.</p>
     <div class="bank" id="bank"></div>
     <div class="slots" id="slots"></div>
   </section>
@@ -171,8 +174,8 @@
       <div style="font-size:70px">🏆</div>
       <h2>Bravo les aventuriers !</h2>
       <p style="font-size:18px;font-weight:850">Vous avez réussi toutes les missions.</p>
-      <div>Le trésor vous attend ici :</div>
-      <div class="location">📍 SOUS LE BANC</div>
+      <div>Le goûter vous attend ici :</div>
+      <div class="location">📍 SALLE POLY</div>
       <button class="reset" onclick="location.reload()">Nouvelle partie</button>
     </div>
   </section>
@@ -187,7 +190,7 @@
   </div>
 </div>
 <script>
-const finalPhrase = "TRESOR SOUS LE BANC!!";
+const finalPhrase = "GOUTER SALLE POLY";
 const mysteryChars = finalPhrase.replaceAll(" ", "").split("");
 
 const baseQuestions = [
@@ -213,7 +216,7 @@ const baseQuestions = [
   "Combien de tables sont collées contre un mur ?"
 ];
 
-let missions = Array.from({length:20}, (_,i)=>({
+let missions = Array.from({length:15}, (_,i)=>({
   room:`Salle ${101+i}`,
   name:`Salle test ${101+i}`,
   question:baseQuestions[i],
@@ -249,7 +252,7 @@ function renderMini(){
 }
 function loadMission(){
   const m=order[current];
-  $('progress').textContent=`Mission ${current+1} / 20`;
+  $('progress').textContent=`Mission ${current+1} / ${order.length}`;
   $('room').textContent=m.room;
   $('roomName').textContent=m.name;
   $('question').textContent=m.question;
@@ -273,33 +276,59 @@ function nextMission(){
   if(current>=order.length){buildPuzzle(); show('finalPuzzle'); burst()} else loadMission();
 }
 
-let dragged=null;
+let selectedTile=null;
 function buildPuzzle(){
   const chars = finalPhrase.split('');
   const bankChars = shuffle(finalPhrase.replaceAll(' ','').split(''));
   $('bank').innerHTML=''; $('slots').innerHTML='';
+
   bankChars.forEach((ch,i)=>{
-    const tile=document.createElement('div'); tile.className='tile'; tile.textContent=ch; tile.draggable=true; tile.dataset.ch=ch; tile.dataset.id='t'+i;
-    tile.addEventListener('dragstart',()=>dragged=tile);
-    tile.addEventListener('touchstart',e=>{dragged=tile; tile.style.opacity=.6},{passive:true});
+    const tile=document.createElement('button');
+    tile.type='button';
+    tile.className='tile';
+    tile.textContent=ch;
+    tile.dataset.ch=ch;
+    tile.dataset.id='t'+i;
+    tile.setAttribute('aria-label','Lettre '+ch);
+    tile.addEventListener('click',()=>selectTile(tile));
+    tile.addEventListener('touchstart',e=>{e.preventDefault(); selectTile(tile);},{passive:false});
     $('bank').appendChild(tile);
   });
+
   chars.forEach((ch,i)=>{
     if(ch===' '){const sp=document.createElement('div'); sp.className='space'; $('slots').appendChild(sp); return;}
-    const slot=document.createElement('div'); slot.className='slot'; slot.dataset.expected=ch; slot.dataset.index=i;
-    slot.addEventListener('dragover',e=>e.preventDefault());
-    slot.addEventListener('drop',e=>{e.preventDefault(); tryPlace(slot)});
-    slot.addEventListener('touchend',()=>tryPlace(slot));
+    const slot=document.createElement('button');
+    slot.type='button';
+    slot.className='slot';
+    slot.dataset.expected=ch;
+    slot.dataset.index=i;
+    slot.setAttribute('aria-label','Case '+(i+1));
+    slot.addEventListener('click',()=>tryPlace(slot));
+    slot.addEventListener('touchstart',e=>{e.preventDefault(); tryPlace(slot);},{passive:false});
     $('slots').appendChild(slot);
   });
-  document.addEventListener('touchend',()=>{document.querySelectorAll('.tile').forEach(t=>t.style.opacity='')});
+}
+function selectTile(tile){
+  if(tile.classList.contains('used')) return;
+  document.querySelectorAll('.tile').forEach(t=>t.classList.remove('selected'));
+  selectedTile=tile;
+  tile.classList.add('selected');
+  navigator.vibrate?.(35);
 }
 function tryPlace(slot){
-  if(!dragged || slot.classList.contains('correct')) return;
-  if(dragged.dataset.ch===slot.dataset.expected){
-    slot.textContent=dragged.dataset.ch; slot.classList.add('correct'); dragged.classList.add('used'); dragged=null; burstSmall(); checkComplete();
+  if(!selectedTile || slot.classList.contains('correct')) return;
+  if(selectedTile.dataset.ch===slot.dataset.expected){
+    slot.textContent=selectedTile.dataset.ch;
+    slot.classList.add('correct');
+    selectedTile.classList.add('used');
+    selectedTile.classList.remove('selected');
+    selectedTile=null;
+    burstSmall();
+    checkComplete();
   }else{
-    dragged.style.animation='shake .28s linear'; navigator.vibrate?.(90); setTimeout(()=>{if(dragged) dragged.style.animation=''},300);
+    selectedTile.classList.add('bad-select');
+    navigator.vibrate?.(90);
+    setTimeout(()=>{selectedTile?.classList.remove('bad-select')},300);
   }
 }
 function burstSmall(){
