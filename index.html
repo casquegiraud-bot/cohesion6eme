@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Cohésion 6e - Chasse au trésor</title>
+<title>Cohésion 6e - Chasse au trésor V3</title>
 <style>
   :root{
     --bg1:#0b1f3a;
@@ -118,6 +118,7 @@
   .tile.used{opacity:.25; pointer-events:none; transform:scale(.86)}
   .slot{background:rgba(255,255,255,.16); border:2px dashed rgba(255,255,255,.45); color:white; padding:0; max-width:none; touch-action:manipulation}
   .slot.correct{background:linear-gradient(180deg,#b9ffd8,#29d391); border:0; color:#073822; box-shadow:0 5px 0 #0c7d50; animation:slotOk .22s ease}
+  .slot.clue{background:linear-gradient(180deg,#e5fbff,#90e0ef); border:0; color:#073044; box-shadow:0 5px 0 #218aa2}
   @keyframes slotOk{50%{transform:scale(1.15)}}
   .space{width:14px; height:48px}
   .success-box{background:linear-gradient(180deg,#fff7dc,#ffc857); color:#2e1d00; border-radius:30px; padding:22px 16px; box-shadow:var(--shadow); border:5px solid rgba(255,255,255,.45)}
@@ -190,8 +191,17 @@
   </div>
 </div>
 <script>
-const finalPhrase = "GOUTER SALLE POLY";
-const mysteryChars = finalPhrase.replaceAll(" ", "").split("");
+const finalPhrase = "GOUTER EN SALLE POLYVALENTE";
+const phraseLetters = finalPhrase.replaceAll(" ", "").split("");
+
+// 16 lettres à trouver, réparties dans toute la phrase.
+// Les 8 autres lettres apparaissent déjà comme indices dans le dernier défi.
+const hiddenLetterPositions = new Set([2, 3, 4, 5, 8, 12, 13, 14, 18, 20, 21, 22, 23, 24, 25, 26]);
+const mysteryChars = finalPhrase
+  .split("")
+  .map((ch, index) => ({ ch, index }))
+  .filter(item => item.ch !== " " && hiddenLetterPositions.has(item.index))
+  .map(item => item.ch);
 
 const baseQuestions = [
   "Comptez le nombre d’équerres visibles près du tableau.",
@@ -209,19 +219,15 @@ const baseQuestions = [
   "Combien de symboles ou pictogrammes sont affichés près de l’entrée ?",
   "Combien de plantes ou décorations vertes voyez-vous ?",
   "Combien d’ordinateurs sont visibles dans la salle ?",
-  "Combien de sacs ou bacs de rangement sont visibles ?",
-  "Combien d’objets rouges voyez-vous près du bureau ?",
-  "Combien de fenêtres sont ouvertes ou entrouvertes ?",
-  "Combien d’extincteurs ou panneaux sécurité voyez-vous à proximité ?",
-  "Combien de tables sont collées contre un mur ?"
+  "Combien de sacs ou bacs de rangement sont visibles ?"
 ];
 
-let missions = Array.from({length:15}, (_,i)=>({
+let missions = Array.from({length:16}, (_,i)=>({
   room:`Salle ${101+i}`,
   name:`Salle test ${101+i}`,
   question:baseQuestions[i],
-  // Réponses test volontairement simples : 1 à 5 en boucle.
-  answer:String((i % 5) + 1),
+  // Réponse test volontairement simple : 1 partout.
+  answer:"1",
   letter:mysteryChars[i]
 }));
 let order=[], current=0, won=[];
@@ -279,7 +285,7 @@ function nextMission(){
 let selectedTile=null;
 function buildPuzzle(){
   const chars = finalPhrase.split('');
-  const bankChars = shuffle(finalPhrase.replaceAll(' ','').split(''));
+  const bankChars = shuffle([...won]);
   $('bank').innerHTML=''; $('slots').innerHTML='';
 
   bankChars.forEach((ch,i)=>{
@@ -303,8 +309,14 @@ function buildPuzzle(){
     slot.dataset.expected=ch;
     slot.dataset.index=i;
     slot.setAttribute('aria-label','Case '+(i+1));
-    slot.addEventListener('click',()=>tryPlace(slot));
-    slot.addEventListener('touchstart',e=>{e.preventDefault(); tryPlace(slot);},{passive:false});
+    if(hiddenLetterPositions.has(i)){
+      slot.addEventListener('click',()=>tryPlace(slot));
+      slot.addEventListener('touchstart',e=>{e.preventDefault(); tryPlace(slot);},{passive:false});
+    }else{
+      slot.textContent=ch;
+      slot.classList.add('correct','clue');
+      slot.disabled=true;
+    }
     $('slots').appendChild(slot);
   });
 }
